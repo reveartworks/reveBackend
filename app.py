@@ -1,0 +1,568 @@
+from flask import Flask, request, jsonify
+from flask_pymongo import PyMongo
+from bson.json_util import dumps
+from bson.objectid import ObjectId
+import json
+from datetime import datetime,  timedelta
+import random
+from bson.binary import Binary  # Import Binary for storing bytes
+import base64
+
+import smtplib
+import bcrypt
+
+
+
+from flask_cors import *
+app = Flask(__name__)
+
+# MongoDB Configuration
+app.config["MONGO_URI"] = "mongodb://localhost:27017/art"
+mongo = PyMongo(app)
+
+HOST = "smtp-mail.outlook.com"
+PORT = 587
+
+FROM_EMAIL = "reveartworks@outlook.com"
+PASSWORD = ""
+
+
+
+def hash_password(password):
+    # Generate a salt
+    salt = bcrypt.gensalt()
+    # Hash the password with the salt
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed_password
+# Home route
+
+
+@app.route('/')
+def home():
+    return "Welcome to the Flask MongoDB API!"
+
+
+@app.route('/userAuth', methods=['POST'])
+@cross_origin()
+def authenticate_user():
+    data = request.json
+    # print(data)
+    if data:
+        user = mongo.db.user.find_one({"email":data['email']})
+        user = json.loads(dumps(user))
+        if user:
+            # Check if the provided password matches the stored hashed password
+            # print(user)
+            stored_hashed_password = user['password']
+        
+            if isinstance(stored_hashed_password, dict):
+                # If retrieved as dict, convert to bytes
+                stored_hashed_password = stored_hashed_password['$binary']['base64']
+                stored_hashed_password = base64.b64decode(stored_hashed_password.encode('utf-8'))
+
+            elif isinstance(stored_hashed_password, Binary):
+                stored_hashed_password = bytes(stored_hashed_password)
+
+            if bcrypt.checkpw(data['password'].encode('utf-8'), stored_hashed_password):
+                print("Password is valid.")
+                return jsonify(message="User Authenticated successfully"), 201
+            else:
+                print("Invalid password.")
+                return jsonify(message="User Not Authenticated"), 400
+        else:
+            print("User not found.")
+            return jsonify(message="User Not Found"), 400
+        # if len(json.loads(dumps(user)))>0:
+            
+    else:
+        return jsonify(message="User Not Authenticated"), 400
+    
+# Create a new document
+@app.route('/add', methods=['POST'])
+@cross_origin()
+def add_document():
+    data = request.json
+    # print(data)
+    if data:
+        ids = [mongo.db.artWorks.insert_one({"image":image}).inserted_id for image in data['images']]
+        data['images'] = ids
+        data['image1'] = ids[0]
+        data['image2'] = ids[1]
+        data['image3'] = ids[2]
+        data['image4'] = ids[3]
+        data['image5'] = ids[4]
+        data['created_on'] = datetime.now();
+        data['updated_on'] = datetime.now();
+
+        id = mongo.db.art.insert_one(data)
+        print(id.inserted_id)
+        return jsonify(message="Document added successfully"), 201
+    else:
+        return jsonify(message="No data provided"), 400
+
+
+
+@app.route('/documents/<status>/<lastId>', methods=['GET'])
+@cross_origin()
+def get_documents(status = "inactive",lastId=""):
+    limit = 4
+    if lastId != "none":
+        filter = {'_id': {'$lt': ObjectId(lastId)}}
+        if status == "active":
+            filter  = {'_id': {'$lt': ObjectId(lastId)},'active':True}
+    else:
+        if status == "active":
+            filter  = {'active':True}
+        else:
+            filter = {}
+
+    documents = mongo.db.art.find(filter).sort("_id",-1).limit(limit)
+    documents = json.loads(dumps(documents))
+
+
+    hasMore = False
+    if documents:
+        if lastId != "none":
+            countFilter = {'_id': {'$lt': ObjectId(documents[-1]['_id']["$oid"])}}
+            if status == "active":
+                countFilter = {'_id': {'$lt': ObjectId(documents[-1]['_id']["$oid"])},'active':True}
+        else:
+            if status == "active":
+                countFilter = {'_id': {'$lt': ObjectId(documents[-1]['_id']["$oid"])},'active':True}
+            else:
+                countFilter = {'_id': {'$lt': ObjectId(documents[-1]['_id']["$oid"])}}
+        # print(countFilter)
+        hasMore = True if len(json.loads(dumps((mongo.db.art.find(countFilter))))) > 0 else False
+    
+    # print(hasMore)
+    for document in documents:
+        # print(document['image1'])
+        document['image1'] = dumps(mongo.db.artWorks.find_one({'_id':ObjectId(document['image1']['$oid'])}))
+        document['hasMore'] = hasMore
+    return json.dumps(documents), 200  # Dumps to convert Cursor to JSON string
+
+@app.route('/documentsSorted/<status>/<order>/<lastId>', methods=['GET'])
+@cross_origin()
+def get_documents_sorted(status = "inactive",order = "none",lastId="none"):
+    # print("here in")
+    limit = 4
+    # order_1_condition = ['Asc','none','all','active','inactive']
+    # order_not1_condition = ['Desc']
+    order_num = -1 if order.endswith("Desc") else 1
+    order_field = order.replace("Asc","").replace("Desc","")
+    if order_field == "none" or order_field == 'all' or order_field == "active" or order_field == 'inactive':
+        order_field = "_id"
+    
+    if status == "active":
+        if lastId != "none":
+            filter = {'_id': {'$lt': ObjectId(lastId)},'active':True}
+        else:
+            filter = {'active':True}
+    else:
+        if lastId != "none":
+            filter = {'_id': {'$lt': ObjectId(lastId)}}
+        else:
+            filter = {}
+    
+        # if order == "none":
+        #     documents = mongo.db.art.find({'active':True}).sort("_id",1)
+        # if order == "nameAsc":
+        #     documents = mongo.db.art.find({'active':True}).sort("name",1)
+        # if order == "nameDesc":
+        #     documents = mongo.db.art.find({'active':True}).sort("name",-1)
+        # if order == "ratingAsc":
+        #     documents = mongo.db.art.find({'active':True}).sort("rating",1)
+        # if order == "ratingDesc":
+        #     documents = mongo.db.art.find({'active':True}).sort("rating",-1)
+        # if order == "ratingDesc":
+        #     documents = mongo.db.art.find({'active':True}).sort("rating",-1)
+        # if order == "all":
+        #     documents = mongo.db.art.find().sort("_id",1)
+        # if order == "active":
+        #     documents = mongo.db.art.find({'active':True}).sort("_id",1)
+        # if order == "inactive":
+        #     documents = mongo.db.art.find({'active':False}).sort("_id",1)
+    print(filter)
+    documents = mongo.db.art.find(filter).sort(order_field,order_num).limit(limit)
+    # else:
+    #     documents = mongo.db.art.find()
+
+
+    documents = json.loads(dumps(documents))
+
+    hasMore = False
+    if documents:
+        if lastId != "none":
+            countFilter = {'_id': {'$lt': ObjectId(documents[-1]['_id']["$oid"])}}
+            if status == "active":
+                countFilter = {'_id': {'$lt': ObjectId(documents[-1]['_id']["$oid"])},'active':True}
+        else:
+            if status == "active":
+                countFilter = {'_id': {'$lt': ObjectId(documents[-1]['_id']["$oid"])},'active':True}
+            else:
+                countFilter = {'_id': {'$lt': ObjectId(documents[-1]['_id']["$oid"])}}
+        # print(countFilter)
+        hasMore = True if len(json.loads(dumps((mongo.db.art.find(countFilter))))) > 0 else False
+    # print(hasMore)
+
+    for document in documents:
+        # print(document['image1'])
+        document['image1'] = dumps(mongo.db.artWorks.find_one({'_id':ObjectId(document['image1']['$oid'])}))
+        document['hasMore'] = hasMore
+
+    return json.dumps(documents), 200  # Dumps to convert Cursor to JSON string
+
+@app.route('/corouselDocuments', methods=['GET'])
+@cross_origin()
+def get_corousel_documents():
+    # print("here in")
+    documents = mongo.db.art.find({"inCorousel":True,"active":True}).limit(5).sort( "updated_on", -1 )
+    documents = json.loads(dumps(documents))
+    for document in documents:
+        # print(document['image1'])
+        document['image1'] = dumps(mongo.db.artWorks.find_one({'_id':ObjectId(document['image1']['$oid'])}))
+
+    return json.dumps(documents), 200  # Dumps to convert Cursor to JSON string
+
+@app.route('/homeGridDocuments', methods=['GET'])
+@cross_origin()
+def get_home_Grid_documents():
+    # print("here in")
+    documents = mongo.db.art.find({"inHomeGrid":True,"active":True}).limit(6).sort( "updated_on", -1 )
+    documents = json.loads(dumps(documents))
+    for document in documents:
+        # print(document['image1'])
+        document['image1'] = dumps(mongo.db.artWorks.find_one({'_id':ObjectId(document['image1']['$oid'])}))
+
+    return json.dumps(documents), 200  # Dumps to convert Cursor to JSON string
+
+
+@app.route('/capturArtMetrics/<sessionId>/<artId>', methods=['GET'])
+@cross_origin()
+def record_art_mertrics(sessionId,artId):
+    current_time = datetime.now()
+    # Calculate the time 60 seconds ago
+    time_threshold = current_time - timedelta(seconds=60)
+
+    # Query to find documents with the specified field value and timestamp within the last 60 seconds
+    query = {
+        "art": artId,  
+        "timestamp": {"$gte": time_threshold}  
+    }
+
+    # Count the documents that match the query
+    count = mongo.db.artworkAccessMetrics.count_documents(query)
+
+    # Check if there are any duplicates
+    if count > 0:
+        # print(f"Found {count} duplicate document(s) with the field value '{id}' in the last 60 seconds.")
+        # return True
+        pass
+    else:
+        # print(f"No duplicates found with the field value '{id}' in the last 60 seconds.")
+        # print("adding metrics")
+        mongo.db.artworkAccessMetrics.insert_one({"art":artId,"sessionId":sessionId,"timestamp":datetime.now()})
+        # return False
+    return jsonify(message="metrics Captured"), 200
+
+@app.route('/capturPageVisits/<user>/<sessionId>', methods=['GET'])
+@cross_origin()
+def record_home_page_visit_mertrics(user,sessionId):
+    # print("user:",user)
+    # print("sessionId",sessionId)
+    # Query to find documents with the specified field value and timestamp within the last 60 seconds
+    query = {
+        "sessionId": sessionId
+    }
+
+    # Count the documents that match the query
+    count = mongo.db.homePageVisitMetrics.count_documents(query)
+
+    # Check if there are any duplicates
+    if count > 0:
+        pass
+    else:
+        mongo.db.homePageVisitMetrics.insert_one({"sessionId":sessionId,"user":user,"timestamp":datetime.now()})
+        # return False
+    return jsonify(message="home page visit metrics Captured"), 200
+
+@app.route('/capturViewAllArtPageVisits/<user>/<sessionId>', methods=['GET'])
+@cross_origin()
+def record_artList_page_visit_mertrics(user,sessionId):
+    # print("user:",user)
+    # print("sessionId",sessionId)
+    # Query to find documents with the specified field value and timestamp within the last 60 seconds
+    query = {
+        "sessionId": sessionId
+    }
+
+    # Count the documents that match the query
+    count = mongo.db.artListPageVisitMetrics.count_documents(query)
+
+    # Check if there are any duplicates
+    if count > 0:
+        pass
+    else:
+        mongo.db.artListPageVisitMetrics.insert_one({"sessionId":sessionId,"user":user,"timestamp":datetime.now()})
+        # return False
+    return jsonify(message="page visit metrics Captured"), 200
+    
+
+# Retrieve a document by ID
+@app.route('/document/<id>', methods=['GET'])
+@cross_origin()
+def get_document(id):
+    # print("documnet accessed by:", user)
+    # if user == "user":
+    #     print("in here")
+    #     mongo.db.artworkAccessMetrics.insert_one({"image":id,"timestamp":datetime.now()})
+    document = mongo.db.art.find_one({'_id': ObjectId(id)})
+    if document:
+        document = json.loads(dumps(document))
+        document['image1'] = dumps(mongo.db.artWorks.find_one({'_id':ObjectId(document['image1']['$oid'])}))
+        document['image2'] = dumps(mongo.db.artWorks.find_one({'_id':ObjectId(document['image2']['$oid'])}))
+        document['image3'] = dumps(mongo.db.artWorks.find_one({'_id':ObjectId(document['image3']['$oid'])}))
+        document['image4'] = dumps(mongo.db.artWorks.find_one({'_id':ObjectId(document['image4']['$oid'])}))
+        document['image5'] = dumps(mongo.db.artWorks.find_one({'_id':ObjectId(document['image5']['$oid'])}))
+        document['images'] = [json.loads(document['image'+str(index)])['image'] for index in range(1,6)]
+        return dumps(document), 200
+    else:
+        return jsonify(message="Document not found"), 404
+    
+# Contact for purchase
+@app.route('/contactForPurchase', methods=['POST'])
+@cross_origin()
+def contactForPurchase():
+    data = request.json
+    # print(data)
+    if data:
+        admin = mongo.db.user.find_one({'role': "admin"})
+        if admin:
+            # print(dumps(admin))
+            admin_email = json.loads(dumps(admin))['email']
+            # print(email)
+            # print(json.loads(dumps(admin))["_id"]['$oid'])
+        else:
+            return jsonify(message="No Admin Found."), 404
+        query = {
+            "sessionId":data['sessionId'],
+            "artName":data['artName'],
+            "artId":data['artId'],
+            "firstName":data['firstName'],
+            "lastName":data['lastName'],
+            "email":data['email']
+        }
+        data['timestamp']  = datetime.now()
+        # Count the documents that match the query
+        count = mongo.db.contactForPurchaseLogs.count_documents(query)
+
+        # Check if there are any duplicates
+        if count > 0:
+            pass
+        else:
+            mongo.db.contactForPurchaseLogs.insert_one(data)
+
+        try:
+            MESSAGE = f"""Subject: Enquiry for Artwork - {data["artName"]}.
+            
+
+            Hi Anwar,
+            Myself {data["firstName"]} {data["lastName"]}, Reaching out to know more regarding the below artwork.
+            Artwork Name: {data["artName"]},
+            Artwork Id : {data["artId"]},
+            Artwork Size : {data["artSize"]}
+
+            Message: {data["comments"]}
+
+            My Contact: {data["email"]}
+
+            Thanks,
+            """
+        
+            smtp = smtplib.SMTP(HOST, PORT)
+            status_code, response =  smtp.ehlo()
+            # print(f"[*] Echoing the server: {status_code} {response}")
+            status_code, response =  smtp.starttls()
+            # print(f"[*] Starting TLS connection: {status_code} - {response}")
+            status_code, response = smtp.login(FROM_EMAIL, PASSWORD)
+            # print(f"[*] Logging in: {status_code} {response}")
+            smtp.sendmail(FROM_EMAIL, admin_email, MESSAGE) 
+            smtp.quit()
+            print("Email Sent!")
+            return jsonify(message="Contacted Artist Successfully!"), 201
+        except Exception as e:
+            print(e)
+            return jsonify(message="Unable to send email."), 400 
+    else:
+        return jsonify(message="No data provided"), 400
+    
+# Contact artist
+@app.route('/contact', methods=['POST'])
+@cross_origin()
+def contact():
+    data = request.json
+    # print(data)
+    if data:
+        admin = mongo.db.user.find_one({'role': "admin"})
+        if admin:
+            # print(dumps(admin))
+            admin_email = json.loads(dumps(admin))['email']
+            # print(email)
+            # print(json.loads(dumps(admin))["_id"]['$oid'])
+        else:
+            return jsonify(message="No Admin Found."), 404
+        query = {
+            "sessionId":data['sessionId'],
+            "firstName":data['firstName'],
+            "lastName":data['lastName'],
+            "email":data['email'],
+            
+        }
+        data['timestamp']  = datetime.now()
+        # Count the documents that match the query
+        count = mongo.db.contactLogs.count_documents(query)
+
+        # Check if there are any duplicates
+        if count > 0:
+            pass
+        else:
+            mongo.db.contactLogs.insert_one(data)
+
+        try:
+            MESSAGE = f"""Subject: Interested in Your Art
+
+            Hi Anwar,
+            Myself {data["firstName"]} {data["lastName"]}, Reaching out to know more regarding the your artwork.
+                        
+            Message: {data["comments"]}
+
+            My Contact: {data["email"]}
+
+            Thanks,
+            """
+        
+            smtp = smtplib.SMTP(HOST, PORT)
+            status_code, response =  smtp.ehlo()
+            # print(f"[*] Echoing the server: {status_code} {response}")
+            status_code, response =  smtp.starttls()
+            # print(f"[*] Starting TLS connection: {status_code} - {response}")
+            status_code, response = smtp.login(FROM_EMAIL, PASSWORD)
+            # print(f"[*] Logging in: {status_code} {response}")
+            smtp.sendmail(FROM_EMAIL, admin_email, MESSAGE) 
+            smtp.quit()
+            print("Email Sent!")
+            return jsonify(message="Contacted Artist Successfully!"), 201
+        except Exception as e:
+            print(e)
+            return jsonify(message="Unable to send email."), 400 
+    else:
+        return jsonify(message="No data provided"), 400
+    
+# Contact artist
+@app.route('/forgotPassword', methods=['GET'])
+@cross_origin()
+def forgot_password():
+    # print("here")
+    # data = request.json
+    # Generate a random 6-digit number
+    verification_code = random.randint(100000, 999999)
+    admin = mongo.db.user.find_one({'role': "admin"})
+    if admin:
+        # print(dumps(admin))
+        email = json.loads(dumps(admin))['email']
+        # print(email)
+        # print(json.loads(dumps(admin))["_id"]['$oid'])
+    else:
+        return jsonify(message="No Admin Found."), 404
+
+    result = mongo.db.user.update_one({'_id': ObjectId(json.loads(dumps(admin))["_id"]['$oid'])}, {"$set": {"verificationCode":verification_code}})
+    if result.modified_count > 0:
+            # print(data)
+        # print("after update")
+        try:
+            MESSAGE = f"""Subject: Password Reset Request
+
+            Hi Admin,
+            Please User Below Verification Code for Password Reset.
+            {verification_code}
+            Thanks,
+            """
+        
+            smtp = smtplib.SMTP(HOST, PORT)
+            status_code, response =  smtp.ehlo()
+            # print(f"[*] Echoing the server: {status_code} {response}")
+            status_code, response =  smtp.starttls()
+            # print(f"[*] Starting TLS connection: {status_code} - {response}")
+            status_code, response = smtp.login(FROM_EMAIL, PASSWORD)
+            # print(f"[*] Logging in: {status_code} {response}")
+            smtp.sendmail(FROM_EMAIL, email, MESSAGE) 
+            smtp.quit()
+            print("Verification Code Email Sent!")
+            return jsonify(message="Verification code sent Successfully!"), 201
+        except Exception as e:
+            print(e)
+            return jsonify(message="Unable to send verification code."), 400 
+    else:
+        return jsonify(message="No changes made or document not found"), 404
+
+
+# Update a document by ID
+@app.route('/document/<id>', methods=['PUT'])
+@cross_origin()
+def update_document(id):
+    data = request.json
+    # print(data)
+    existing_artwork = mongo.db.art.find_one({'_id': ObjectId(id)})
+    existing_artwork = json.loads(dumps(existing_artwork))['images']
+    for image in existing_artwork:
+        # print(image['$oid'])
+        delete_artwork_document(image['$oid'])
+        
+    if data:
+        ids = [mongo.db.artWorks.insert_one({"image":image}).inserted_id for image in data['images']]
+        data['images'] = ids
+        data['image1'] = ids[0]
+        data['image2'] = ids[1]
+        data['image3'] = ids[2]
+        data['image4'] = ids[3]
+        data['image5'] = ids[4]
+        data['updated_on'] = datetime.now();
+        data['rating']  = float(data['rating'])
+        # id = mongo.db.art.insert_one(data)
+        result = mongo.db.art.update_one({'_id': ObjectId(id)}, {"$set": data})
+        if result.modified_count > 0:
+            return jsonify(message="Document updated successfully"), 200
+        else:
+            return jsonify(message="No changes made or document not found"), 404
+        # pass
+        # return jsonify(message="No data provided"), 400
+    else:
+        return jsonify(message="No data provided"), 400
+
+
+@app.route('/updatePassword', methods=['PUT'])
+@cross_origin()
+def update_password():
+    data = request.json
+    # print(data)
+    if data:
+        # print("in here")
+        # doc = mongo.db.user.find_one({'role':"admin",'verificationCode':int(data['verificationCode'])})
+        # print(dumps(doc))
+        result = mongo.db.user.update_one({'role': "admin",'verificationCode':int(data['verificationCode'])}, {"$set": {"password":hash_password(data['password']),"verificationCode":random.randint(100000, 999999)}})
+        if result.modified_count > 0:
+            return jsonify(message="Password updated successfully"), 200
+        else:
+            return jsonify(message="Password Update failed."), 405
+    else:
+        return jsonify(message="No data provided"), 400
+
+def delete_artwork_document(id):
+    result = mongo.db.artWorks.delete_one({'_id': ObjectId(id)})
+    if result.deleted_count > 0:
+        return jsonify(message="Document deleted successfully"), 200
+    else:
+        return jsonify(message="Document not found"), 404
+
+if __name__ == '__main__':
+    app.run(debug=True,host="0.0.0.0",port=5001)
