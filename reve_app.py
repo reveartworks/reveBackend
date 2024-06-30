@@ -27,8 +27,8 @@ PORT = 587
 pass_keys = email_passes()
 FROM_EMAIL = pass_keys['email']
 PASSWORD = pass_keys['pass']
-print(FROM_EMAIL)
-print(PASSWORD)
+# print(FROM_EMAIL)
+# print(PASSWORD)
 
 
 
