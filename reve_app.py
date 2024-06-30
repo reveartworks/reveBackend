@@ -11,6 +11,7 @@ import base64
 import smtplib
 import bcrypt
 
+from pass_keys import email_passes
 
 
 from flask_cors import *
@@ -23,8 +24,11 @@ mongo = PyMongo(app)
 HOST = "smtp-mail.outlook.com"
 PORT = 587
 
-FROM_EMAIL = "reveartworks@outlook.com"
-PASSWORD = ""
+pass_keys = email_passes()
+FROM_EMAIL = pass_keys['email']
+PASSWORD = pass_keys['pass']
+print(FROM_EMAIL)
+print(PASSWORD)
 
 
 
