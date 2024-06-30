@@ -706,9 +706,14 @@ def get_user_visit_metrics():
         # Aggregation pipeline for artwork views
         pipeline = [
             {
+                '$addFields': {
+                    'artObjectId': { '$toObjectId': '$art' }
+                }
+            },
+            {
                 '$lookup': {
                     'from': 'art',
-                    'localField': 'art',
+                    'localField': 'artObjectId',
                     'foreignField': '_id',
                     'as': 'artworkDetails'
                 }
@@ -718,7 +723,7 @@ def get_user_visit_metrics():
             },
             {
                 '$group': {
-                    '_id': '$art',
+                    '_id': '$artObjectId',
                     'artworkName': { '$first': '$artworkDetails.name' },
                     'accessCount': { '$sum': 1 }
                 }
@@ -742,7 +747,7 @@ def get_user_visit_metrics():
         # Execute the aggregation pipeline
         top_artworks = list(mongo.db.artworkAccessMetrics.aggregate(pipeline))
         result['top_artworks'] = top_artworks
-        
+
         return jsonify(result), 200
 
     except Exception as e:
