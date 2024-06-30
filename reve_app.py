@@ -109,7 +109,7 @@ def add_document():
 @app.route('/documents/<status>/<lastId>', methods=['GET'])
 @cross_origin()
 def get_documents(status = "inactive",lastId=""):
-    limit = 10
+    limit = 10 if status == 'active' else 100
     if lastId != "none":
         filter = {'_id': {'$lt': ObjectId(lastId)}}
         if status == "active":
