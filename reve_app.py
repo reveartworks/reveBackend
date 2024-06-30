@@ -756,6 +756,35 @@ def get_user_visit_metrics():
         serialized_artworks = [serialize_document(doc) for doc in top_artworks]
         result['top_artworks'] = serialized_artworks
 
+        # Aggregation pipeline to get top artworks by contact count
+        pipeline = [
+            {
+                '$group': {
+                    '_id': '$artId',
+                    'artworkName': { '$first': '$artName' },
+                    'contactCount': { '$sum': 1 }
+                }
+            },
+            {
+                '$sort': { 'contactCount': -1 }
+            },
+            {
+                '$limit': 20
+            },
+            {
+                '$project': {
+                    '_id': 0,
+                    'artworkId': '$_id',
+                    'artworkName': 1,
+                    'contactCount': 1
+                }
+            }
+        ]
+
+        # Execute the aggregation pipeline
+        top_contact_artworks = list(mongo.db.contactForPurchaseLogs.aggregate(pipeline))
+        result['top_contact_artworks'] = top_contact_artworks
+
         return jsonify(result), 200
 
     except Exception as e:
