@@ -565,7 +565,8 @@ def update_password():
 @cross_origin()
 def get_user_visit_metrics():
     # Extract user_id from query parameters
-    user_id = request.args.get('user')
+    # user_id = request.args.get('user')
+    user_id  = "user"
     if not user_id:
         return jsonify(message="User ID not provided"), 400
 
@@ -624,9 +625,17 @@ def get_user_visit_metrics():
                     'quarter': {
                         '$cond': [
                             { '$lte': [{ '$month': "$timestamp" }, 3] }, 1,
-                            { '$lte': [{ '$month': "$timestamp" }, 6] }, 2,
-                            { '$lte': [{ '$month': "$timestamp" }, 9] }, 3,
-                            4
+                            {
+                                '$cond': [
+                                    { '$lte': [{ '$month': "$timestamp" }, 6] }, 2,
+                                    {
+                                        '$cond': [
+                                            { '$lte': [{ '$month': "$timestamp" }, 9] }, 3,
+                                            4
+                                        ]
+                                    }
+                                ]
+                            }
                         ]
                     }
                 },
