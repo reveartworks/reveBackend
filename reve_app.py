@@ -561,6 +561,13 @@ def update_password():
     else:
         return jsonify(message="No data provided"), 400
 
+# Helper function to convert ObjectId to string
+def serialize_document(doc):
+    for key, value in doc.items():
+        if isinstance(value, ObjectId):
+            doc[key] = str(value)
+    return doc
+
 @app.route('/userVisitMetrics', methods=['GET'])
 @cross_origin()
 def get_user_visit_metrics():
@@ -746,7 +753,8 @@ def get_user_visit_metrics():
 
         # Execute the aggregation pipeline
         top_artworks = list(mongo.db.artworkAccessMetrics.aggregate(pipeline))
-        result['top_artworks'] = top_artworks
+        serialized_artworks = [serialize_document(doc) for doc in top_artworks]
+        result['top_artworks'] = serialized_artworks
 
         return jsonify(result), 200
 
