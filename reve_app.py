@@ -578,11 +578,26 @@ def get_user_visit_metrics():
     # collection = client[db_name][collection_name]
 
     # Common match stage to filter by user
+    # match_stage = { '$match': { 'user': user_id } }
+    now = datetime.utcnow()
+    start_of_month = datetime(now.year, now.month, 1)
+    end_of_month = start_of_month + timedelta(days=32)
+    end_of_month = end_of_month.replace(day=1)
+
+    # Common match stage to filter by user
     match_stage = { '$match': { 'user': user_id } }
 
-    # Aggregation pipeline for daily visits
+    # Aggregation pipeline for daily visits within the current month
     daily_pipeline = [
         match_stage,
+        {
+            '$match': {
+                'timestamp': {
+                    '$gte': start_of_month,
+                    '$lt': end_of_month
+                }
+            }
+        },
         {
             '$group': {
                 '_id': {
