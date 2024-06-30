@@ -557,6 +557,130 @@ def update_password():
     else:
         return jsonify(message="No data provided"), 400
 
+@app.route('/userVisitMetrics', methods=['GET'])
+@cross_origin()
+def get_user_visit_metrics():
+    # Extract user_id from query parameters
+    user_id = request.args.get('user')
+    if not user_id:
+        return jsonify(message="User ID not provided"), 400
+
+    # MongoDB connection setup
+    # mongo_uri = 'mongodb://localhost:27017/'
+    # client = MongoClient(mongo_uri)
+    # db_name = 'art'
+    # collection_name = 'artListPageVisitMetrics'
+    # collection = client[db_name][collection_name]
+
+    # Common match stage to filter by user
+    match_stage = { '$match': { 'user': user_id } }
+
+    # Aggregation pipeline for daily visits
+    daily_pipeline = [
+        match_stage,
+        {
+            '$group': {
+                '_id': {
+                    'year': { '$year': "$timestamp" },
+                    'month': { '$month': "$timestamp" },
+                    'day': { '$dayOfMonth': "$timestamp" }
+                },
+                'visitCount': { '$sum': 1 }
+            }
+        },
+        {
+            '$sort': { "_id.year": 1, "_id.month": 1, "_id.day": 1 }
+        }
+    ]
+
+    # Aggregation pipeline for monthly visits
+    monthly_pipeline = [
+        match_stage,
+        {
+            '$group': {
+                '_id': {
+                    'year': { '$year': "$timestamp" },
+                    'month': { '$month': "$timestamp" }
+                },
+                'visitCount': { '$sum': 1 }
+            }
+        },
+        {
+            '$sort': { "_id.year": 1, "_id.month": 1 }
+        }
+    ]
+
+    # Aggregation pipeline for quarterly visits
+    quarterly_pipeline = [
+        match_stage,
+        {
+            '$group': {
+                '_id': {
+                    'year': { '$year': "$timestamp" },
+                    'quarter': {
+                        '$cond': [
+                            { '$lte': [{ '$month': "$timestamp" }, 3] }, 1,
+                            { '$lte': [{ '$month': "$timestamp" }, 6] }, 2,
+                            { '$lte': [{ '$month': "$timestamp" }, 9] }, 3,
+                            4
+                        ]
+                    }
+                },
+                'visitCount': { '$sum': 1 }
+            }
+        },
+        {
+            '$sort': { "_id.year": 1, "_id.quarter": 1 }
+        }
+    ]
+
+    # Aggregation pipeline for yearly visits
+    yearly_pipeline = [
+        match_stage,
+        {
+            '$group': {
+                '_id': { 'year': { '$year': "$timestamp" } },
+                'visitCount': { '$sum': 1 }
+            }
+        },
+        {
+            '$sort': { "_id.year": 1 }
+        }
+    ]
+
+    try:
+        # Execute the aggregation pipelines
+        daily_visits = list(mongo.db.artListPageVisitMetrics.aggregate(daily_pipeline))
+        monthly_visits = list(mongo.db.artListPageVisitMetrics.aggregate(monthly_pipeline))
+        quarterly_visits = list(mongo.db.artListPageVisitMetrics.aggregate(quarterly_pipeline))
+        yearly_visits = list(mongo.db.artListPageVisitMetrics.aggregate(yearly_pipeline))
+
+        # Format results into a structured dictionary
+        result = {
+            'daily': [{
+                'date': f"{doc['_id']['year']}-{doc['_id']['month']:02d}-{doc['_id']['day']:02d}",
+                'visitCount': doc['visitCount']
+            } for doc in daily_visits],
+            'monthly': [{
+                'date': f"{doc['_id']['year']}-{doc['_id']['month']:02d}",
+                'visitCount': doc['visitCount']
+            } for doc in monthly_visits],
+            'quarterly': [{
+                'date': f"Q{doc['_id']['quarter']} {doc['_id']['year']}",
+                'visitCount': doc['visitCount']
+            } for doc in quarterly_visits],
+            'yearly': [{
+                'date': f"{doc['_id']['year']}",
+                'visitCount': doc['visitCount']
+            } for doc in yearly_visits]
+        }
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify(message=f"Error retrieving metrics: {str(e)}"), 500
+
+
 def delete_artwork_document(id):
     result = mongo.db.artWorks.delete_one({'_id': ObjectId(id)})
     if result.deleted_count > 0:
