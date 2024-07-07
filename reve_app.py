@@ -145,6 +145,34 @@ def get_documents(status = "inactive",lastId=""):
         document['hasMore'] = hasMore
     return json.dumps(documents), 200  # Dumps to convert Cursor to JSON string
 
+
+@app.route('/homeDocument/<imageSection>/<imageIndex>', methods=['GET'])
+@cross_origin()
+def get_home_document(imageSection , imageIndex):
+    
+    filter  = {'imageSection':imageSection,'imageIndex':int(imageIndex)}
+
+    documents = mongo.db.homeImages.find(filter)
+    documents = json.loads(dumps(documents))
+
+    return json.dumps(documents), 200  
+
+@app.route('/homeDocument/<imageSection>/<imageIndex>', methods=['POST'])
+@cross_origin()
+def update_home_document(imageSection,imageIndex):
+    data = request.json
+    # print(data)
+    if data:
+        if len(json.loads(dumps(mongo.db.homeImages.find({"imageSection":imageSection,"imageIndex":int(imageIndex)})))) > 0:
+            mongo.db.homeImages.update_one({"imageSection":imageSection,"imageIndex":int(imageIndex)},{"$set":{"imageIndex":int(imageIndex),"imageSection":imageSection,"image":data['image'],"name":data['name'],"height":data['height'],"width":data['width']}})
+        else:
+            mongo.db.homeImages.insert_one({"imageIndex":int(imageIndex),"imageSection":imageSection,"image":data['image'],"name":data['name'],"height":data['height'],"width":data['width']})
+        
+        return jsonify(message="Document updated successfully"), 201
+    else:
+        return jsonify(message="No data provided"), 400
+
+
 @app.route('/documentsSorted/<status>/<order>/<lastId>', methods=['GET'])
 @cross_origin()
 def get_documents_sorted(status = "inactive",order = "none",lastId="none"):
@@ -220,11 +248,8 @@ def get_documents_sorted(status = "inactive",order = "none",lastId="none"):
 @cross_origin()
 def get_corousel_documents():
     # print("here in")
-    documents = mongo.db.art.find({"inCorousel":True,"active":True}).limit(5).sort( "updated_on", -1 )
+    documents = mongo.db.homeImages.find({"imageSection":"corousel"}).limit(5).sort( "imageIndex", 1 )
     documents = json.loads(dumps(documents))
-    for document in documents:
-        # print(document['image1'])
-        document['image1'] = dumps(mongo.db.artWorks.find_one({'_id':ObjectId(document['image1']['$oid'])}))
 
     return json.dumps(documents), 200  # Dumps to convert Cursor to JSON string
 
@@ -232,11 +257,11 @@ def get_corousel_documents():
 @cross_origin()
 def get_home_Grid_documents():
     # print("here in")
-    documents = mongo.db.art.find({"inHomeGrid":True,"active":True}).limit(6).sort( "updated_on", -1 )
+    documents = mongo.db.homeImages.find({"imageSection":"homeGrid"}).limit(6).sort( "imageIndex", 1 )
     documents = json.loads(dumps(documents))
-    for document in documents:
-        # print(document['image1'])
-        document['image1'] = dumps(mongo.db.artWorks.find_one({'_id':ObjectId(document['image1']['$oid'])}))
+    # for document in documents:
+    #     # print(document['image1'])
+    #     document['image1'] = dumps(mongo.db.artWorks.find_one({'_id':ObjectId(document['image1']['$oid'])}))
 
     return json.dumps(documents), 200  # Dumps to convert Cursor to JSON string
 
