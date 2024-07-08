@@ -815,7 +815,15 @@ def get_user_visit_metrics():
     except Exception as e:
         return jsonify(message=f"Error retrieving metrics: {str(e)}"), 500
 
-
+@app.route('/deleteArtwork/<id>', methods=['GET'])
+@cross_origin()
+def delete_art(id):
+    result = mongo.db.art.delete_one({'_id': ObjectId(id)})
+    if result.deleted_count > 0:
+        return jsonify(message="Document deleted successfully"), 200
+    else:
+        return jsonify(message="Document not found"), 404
+    
 def delete_artwork_document(id):
     result = mongo.db.artWorks.delete_one({'_id': ObjectId(id)})
     if result.deleted_count > 0:
