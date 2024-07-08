@@ -253,6 +253,16 @@ def get_corousel_documents():
 
     return json.dumps(documents), 200  # Dumps to convert Cursor to JSON string
 
+
+@app.route('/corouselDocuments1', methods=['GET'])
+@cross_origin()
+def get_corousel_documents1():
+    # print("here in")
+    documents = mongo.db.homeImages.find({"imageSection":"corousel"}).limit(1).sort( "imageIndex", 1 )
+    documents = json.loads(dumps(documents))
+
+    return json.dumps(documents), 200  # Dumps to convert Cursor to JSON string
+
 @app.route('/homeGridDocuments', methods=['GET'])
 @cross_origin()
 def get_home_Grid_documents():
