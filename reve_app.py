@@ -164,9 +164,9 @@ def update_home_document(imageSection,imageIndex):
     # print(data)
     if data:
         if len(json.loads(dumps(mongo.db.homeImages.find({"imageSection":imageSection,"imageIndex":int(imageIndex)})))) > 0:
-            mongo.db.homeImages.update_one({"imageSection":imageSection,"imageIndex":int(imageIndex)},{"$set":{"imageIndex":int(imageIndex),"imageSection":imageSection,"image":data['image'],"name":data['name'],"height":data['height'],"width":data['width']}})
+            mongo.db.homeImages.update_one({"imageSection":imageSection,"imageIndex":int(imageIndex)},{"$set":{"imageIndex":int(imageIndex),"imageSection":imageSection,"image":data['image'],"name":data['name'],"height":data['height'],"width":data['width'],"artworkUrl":data['artworkUrl']}})
         else:
-            mongo.db.homeImages.insert_one({"imageIndex":int(imageIndex),"imageSection":imageSection,"image":data['image'],"name":data['name'],"height":data['height'],"width":data['width']})
+            mongo.db.homeImages.insert_one({"imageIndex":int(imageIndex),"imageSection":imageSection,"image":data['image'],"name":data['name'],"height":data['height'],"width":data['width'],"artworkUrl":data['artworkUrl']})
         
         return jsonify(message="Document updated successfully"), 201
     else:
