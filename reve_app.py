@@ -27,6 +27,7 @@ PORT = 587
 pass_keys = email_passes()
 FROM_EMAIL = pass_keys['email']
 PASSWORD = pass_keys['pass']
+PASSCODE = pass_keys['passCode']
 # print(FROM_EMAIL)
 # print(PASSWORD)
 
@@ -81,6 +82,7 @@ def authenticate_user():
     else:
         return jsonify(message="User Not Authenticated"), 400
     
+
 # Create a new document
 @app.route('/add', methods=['POST'])
 @cross_origin()
@@ -392,6 +394,8 @@ def contactForPurchase():
             "email":data['email']
         }
         data['timestamp']  = datetime.now()
+        data['seen'] = False
+        data['contacted'] = False
         # Count the documents that match the query
         count = mongo.db.contactForPurchaseLogs.count_documents(query)
 
@@ -458,6 +462,8 @@ def contact():
             
         }
         data['timestamp']  = datetime.now()
+        data['seen'] = False
+        data['contacted'] = False
         # Count the documents that match the query
         count = mongo.db.contactLogs.count_documents(query)
 
@@ -833,7 +839,136 @@ def delete_art(id):
         return jsonify(message="Document deleted successfully"), 200
     else:
         return jsonify(message="Document not found"), 404
+
+@app.route('/getPurchaseEnquiries', methods=['POST'])
+@cross_origin()
+def get_purchase_enquiries():
+    data = request.json
+    # print(data)
+    if data:
+        pass_code = data['passCode']
+        if pass_code == PASSCODE:
+
+            enquiries = mongo.db.contactForPurchaseLogs.find().sort('timestamp',-1)
+            enquiries = json.loads(dumps(enquiries))
+            if enquiries:
+                purchase_enquiries = []
+                for enquiry in enquiries:
+                    purchase_enquiries.append({"id": enquiry['_id']['$oid'],
+                                               "name": enquiry['firstName'] + " " + enquiry['lastName'],
+                                               "email": enquiry['email'],
+                                               "artName": enquiry['artName'],
+                                               "artSize": enquiry['artSize'],
+                                               "comments": enquiry['comments'],
+                                               "artId": enquiry['artId'],
+                                               "date": convert_timestamp_to_ddmmyy(enquiry['timestamp']['$date']) if 'timestamp' in enquiry.keys() else "",
+                                               "seen": True if 'seen' in enquiry.keys() and enquiry['seen'] == True else False,
+                                               "contacted": True if 'contacted' in enquiry.keys() and enquiry['contacted'] == True else False})
+                    
+                return dumps(purchase_enquiries), 200
+            else:
+                print("No Purchase Enquiries found")
+                return jsonify(message="No Purchase Enquiries found"), 400
+        else:
+            return jsonify(message="Invalid Passcode"), 400
+        # if len(json.loads(dumps(user)))>0:
+            
+    else:
+        return jsonify(message="Invalid Passcode"), 400
     
+@app.route('/getContactEnquiries', methods=['POST'])
+@cross_origin()
+def get_contact_enquiries():
+    data = request.json
+    # print(data)
+    if data:
+        pass_code = data['passCode']
+        if pass_code == PASSCODE:
+
+            enquiries = mongo.db.contactLogs.find().sort('timestamp',-1)
+            enquiries = json.loads(dumps(enquiries))
+            if enquiries:
+                purchase_enquiries = []
+                for enquiry in enquiries:
+                    purchase_enquiries.append({"id": enquiry['_id']['$oid'],
+                                               "name": enquiry['firstName'] + " " + enquiry['lastName'],
+                                               "email": enquiry['email'],
+                                               "comments": enquiry['comments'],
+                                               "date": convert_timestamp_to_ddmmyy(enquiry['timestamp']['$date']) if 'timestamp' in enquiry.keys() else "",
+                                               "seen": True if 'seen' in enquiry.keys() and enquiry['seen'] == True else False,
+                                               "contacted": True if 'contacted' in enquiry.keys() and enquiry['contacted'] == True else False})
+                    
+                return dumps(purchase_enquiries), 200
+            else:
+                print("No Contact Enquiries found")
+                return jsonify(message="No Contact Enquiries found"), 400
+        else:
+            return jsonify(message="Invalid Passcode"), 400
+        # if len(json.loads(dumps(user)))>0:
+            
+    else:
+        return jsonify(message="Invalid Passcode"), 400
+    
+@app.route('/updateEnquiryStatus', methods=['POST'])
+@cross_origin()
+def update_enquiry_status():
+    data = request.json
+    print(data)
+    if data:
+        type = data['type']
+        id = data['enquiryId']
+        seen = data['seen']
+        contacted = data['contacted']
+
+        if type == 'purchase':
+            try:
+                mongo.db.contactForPurchaseLogs.update_one({"_id": ObjectId(id)}, {"$set": {"seen":seen, "contacted":contacted}})
+                print("enquirty status updated successfully for purchase enquery " + id)
+                return jsonify(message="enquirty status updated successfully for purchase enquery " + id), 200
+            except Exception as e:
+                print("Error updating enquiry status for purchase enquery " + id + " error : " + e)
+                return jsonify(message="enquirty status cannot be updated for purchase enquery " + id), 400
+        else:
+            try:
+                mongo.db.contactLogs.update_one({"_id": ObjectId(id)}, {"$set": {"seen":seen, "contacted":contacted}})
+                print("enquirty status updated successfully for purchase enquery " + id)
+                return jsonify(message="enquirty status updated successfully for purchase enquery " + id), 200
+            except Exception as e:
+                print("Error updating enquiry status for purchase enquery " + id + " error : " + e)
+                return jsonify(message="enquirty status cannot be updated for purchase enquery " + id), 400
+        
+    else:
+        return jsonify(message="cannot update enquiry status"), 400
+
+def convert_timestamp_to_ddmmyy(timestamp_str):
+  """
+  Converts a timestamp string in the format "YYYY-MM-DDTHH:MM:SS.SSS" 
+  to the "ddmmyy" format using the datetime module.
+
+  Args:
+    timestamp_str: The timestamp string to convert.
+
+  Returns:
+    The timestamp string in the "ddmmyy" format.
+  """
+  print(timestamp_str)
+  try:
+    # Parse the timestamp string into a datetime object
+    timestamp_obj = datetime.fromisoformat(timestamp_str[:-1]) 
+
+    # Extract day, month, and year components
+    day = timestamp_obj.day
+    month = timestamp_obj.month
+    year = str(timestamp_obj.year)[-2:]  # Get the last two digits of the year
+
+    # Format the timestamp in "ddmmyy" format
+    ddmmyy_str = f"{day:02d}/{month:02d}/{year}" 
+    return ddmmyy_str
+  except ValueError as e:
+    print(e)
+    print(f"Invalid timestamp format: {timestamp_str}")
+    return None
+  
 def delete_artwork_document(id):
     result = mongo.db.artWorks.delete_one({'_id': ObjectId(id)})
     if result.deleted_count > 0:
