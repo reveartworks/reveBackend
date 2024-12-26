@@ -839,6 +839,32 @@ def delete_art(id):
         return jsonify(message="Document deleted successfully"), 200
     else:
         return jsonify(message="Document not found"), 404
+    
+@app.route('/deleteEnquiry', methods=['POST'])
+@cross_origin()
+def delete_enquiry():
+    data = request.json
+    # print(data)
+    if data:
+        enquiry_id = data['enquiryId']
+        type = data['type']
+        if type == 'purchase':
+
+            result = mongo.db.contactForPurchaseLogs.delete_one({'_id': ObjectId(enquiry_id)})
+            if result.deleted_count > 0:
+                return jsonify(message="Purchase enquiry deleted successfully"), 200
+            else:
+                return jsonify(message="Purchase enquiry not found"), 404
+        else:
+            result = mongo.db.contactLogs.delete_one({'_id': ObjectId(enquiry_id)})
+            if result.deleted_count > 0:
+                return jsonify(message="Contact enquiry deleted successfully"), 200
+            else:
+                return jsonify(message="Contact enquiry not found"), 404
+        # if len(json.loads(dumps(user)))>0:
+            
+    else:
+        return jsonify(message="Cannot delete enquiry"), 400
 
 @app.route('/getPurchaseEnquiries', methods=['POST'])
 @cross_origin()
